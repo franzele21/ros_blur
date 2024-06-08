@@ -180,3 +180,4 @@ pyrightconfig.json
 *.bag
 *.mp4
 *.csv
+.vscode/
