@@ -1,3 +1,12 @@
+"""
+This program is used to blur ROS bag file.
+YOu will have to have file of Yolov8 weights to find the parts to blur.
+
+
+
+Author: @franzele21
+"""
+
 import argparse
 
 if "__main__" == __name__:
@@ -21,10 +30,15 @@ import cv2
 import math
 from tqdm import tqdm
 import numpy as np
+import os
+import shutil
 
+# modules used for opening / editing / writing ROS bag file
 import rosbag
 from cv_bridge import CvBridge
 import bagpy as bg
+from rosbags.rosbag2 import Reader, Writer
+from rosbags.typesys import Stores, get_typestore
 
 def fill_list(box_list: list, frame_rate:int=1, box_difference:int=5):
     """
@@ -93,42 +107,44 @@ def fill_list(box_list: list, frame_rate:int=1, box_difference:int=5):
     ]
     """
     for i in range(1, len(box_list)-1):
-        # on regarde les boxes de la frame précédente
+        # We look at the boxes from the previous frame
         for last_boxes in box_list[i-1]:
             correspondance_now = False
             for present_boxe in box_list[i]:
-                # on trouve une frame ressemblante dans la frame actuelle
+                # We find a similar box in the current frame
                 if np.isclose(last_boxes, present_boxe, atol=box_difference).all():
                     correspondance_now = True
-            # si on trouve, alors on s'arrête là (pas besoin de créer de boxe)
+            # If found, then we stop there (no need to create a box)
             if correspondance_now:
                 continue
             
-            # on regarde si les frames d'après ressemble à une box de la frame précédente
+            # We check if the following frames resemble a box from the previous frame
             correspondance_after = False
             for j in range(frame_rate):
                 if len(box_list) > i+j+1:
                     for next_boxe in box_list[i+j+1]:
-                        # on trouve une frame ressemblante
+                        # We find a similar box
                         if np.isclose(last_boxes, next_boxe, atol=box_difference).all():
                             correspondance_after = True
                             break
                     if correspondance_after:
                         break
             
-            # si on trouve une frame ressemblante, alors on créer une approximation entre la
-            # boxe de la frame précédente et suivante
+            # If a similar box is found, then we create an approximation between
+            # the box from the previous frame and the following one
             if correspondance_after:
                 box_list[i].append(np.mean([last_boxes, next_boxe], axis=0).tolist())
 
-        # on rajoute des boxes aux frames précédentes
+        # We add boxes to the previous frames
         for present_boxe in box_list[i]:
             correspondance = False
             for last_boxe in box_list[i-1]:
                 if np.isclose(last_boxe, present_boxe, atol=box_difference).all():
                     correspondance = True
             if not correspondance:
-                box_list[i-1].append(present_boxe) 
+                for j in range(frame_rate):
+                    if i-j-1 >= 0:
+                        box_list[i-j-1].append(present_boxe)
 
     return box_list
 
@@ -326,9 +342,9 @@ def blur_ros1(model,
                             # modify the thrust threeshold 
                             if len(boxes.conf) > 0:
                                 if isinstance(min_conf, type(None)):
-                                    min_conf = boxes.conf.mean() * 0.7
+                                    min_conf = boxes.conf.mean() * 0.6
                                 else:
-                                    min_conf = (min_conf + boxes.conf.mean())/2 * 0.7
+                                    min_conf = (min_conf + boxes.conf.mean())/2 * 0.6
                             
                             # For all detections, we add those boxes 
                             # to the boxes list
@@ -359,8 +375,7 @@ def blur_ros1(model,
 
         # This function adds boxes to counter flickering of the boxes, 
         # and add boxes before the prediction 
-        boxes_list = fill_list(boxes_list, frame_verif_rate*2, math.ceil(math.sqrt(max(img_msg.width, img_msg.height)))*2)
-
+        boxes_list = fill_list(boxes_list, frame_verif_rate*2, math.ceil(math.sqrt(max(img_msg.width, img_msg.height)))*2.5)
 
         if verbose:
             input_bag_messages = tqdm(rosbag.Bag(input_path).read_messages())
@@ -385,6 +400,243 @@ def blur_ros1(model,
 
                 # Go to the next frame
                 idx_boxes += 1
+
+    if verbose: print("End of blurring")
+
+def blur_ros2(model, 
+              input_path: str, 
+              output_path: str,
+              img_topic: str,
+              frame_verif_rate: int=5,
+              black_box: bool=False,
+              verbose: bool=False):
+    """
+    Applies blurring to specific regions in images from a ROS2 bag file based
+    on detections from a model, and outputs the processed images as
+    another ROS2 bag file (but as for now, just in a MP4 video file).
+
+    Parameters
+    ----------
+    model : object
+        An object representing a detection model. This model must be callable
+        with an image parameter and return an object containing detection
+        boxes with confidence scores.
+    input_path : str
+        The file path to the input ROS2 bag file containing the images to be
+        processed.
+    output_path : str
+        The file path where the processed images will be saved. The result
+        will be an MP4 video file.
+    img_topic : str
+        The topic name in the ROS2 bag file that contains the images to be
+        processed.
+    frame_verif_rate : int, optional
+        The number of frames after which verification and potential blurring
+        occur. Default is 5.
+    black_box : bool, optional
+        If True, blurs the regions with a solid black box; otherwise uses
+        a Gaussian blur. Default is False.
+    verbose : bool, optional
+        If True, prints detailed logs about the processing steps. Default is
+        False.
+
+    Notes
+    -----
+    This function reads from the specified `img_topic` and uses the model to
+    detect areas to blur. It processes frames in groups defined by
+    `frame_verif_rate`. The detections determine if subsequent frames should
+    be blurred. The function currently outputs the result as an MP4 video file,
+    but the commented sections provide insight into how the function might be
+    extended to support writing back to a ROS2 bag file.
+
+    The function is a placeholder and indicates that further implementation is
+    needed to handle various data management aspects like copying .db3 and
+    .yaml files, handling non-image topics, and properly finalizing the writing
+    into the ROS2 bag file.
+    """
+    ####################### PLACEHOLDER CODE #######################
+    print("\n\n\nTHIS METHOD ISN'T FULLY IMPLEMENTED YET, THE RESULT WILL JUST BE A MP4 VIDEO\n\n\n")
+    ################################################################
+
+    ################### FINISH IMPLEMENTING ROS2 ###################
+    # if verbose: print(f"Verification if needing to be copied")
+    # if not os.path.exists(output_path): os.mkdir(output_path)
+
+    # db3_file_list = [file for file in os.listdir(output_path) if ".db" in file]
+    # if len(db3_file_list) == 0:
+    #     if verbose: print(f"Copying the .db3 file (this may take a while)")
+    #     db3_file_name = [file for file in os.listdir(input_path) if len(file)> 1 and".db3" == file[-4:]][0]
+    #     shutil.copyfile(os.path.join(input_path, db3_file_name), os.path.join(output_path, db3_file_name))
+    # else:
+    #     db3_file_name = db3_file_list[0]
+
+    # yaml_file_list = [file for file in os.listdir(output_path) if ".yaml" in file]
+    # if len(yaml_file_list) == 0:
+    #     yaml_file_name = [file for file in os.listdir(input_path) if len(file)> 1 and".yaml" == file[-5:]][0]
+    #     shutil.copyfile(os.path.join(input_path, yaml_file_name), os.path.join(output_path, yaml_file_name))
+    # if verbose: print(f"End of copying")
+    ################################################################
+
+    ################### FINISH IMPLEMENTING ROS2 ###################
+    # Image = typestore.types['sensor_msgs/msg/Image']
+    # writer_connection_dict = {}
+    ################################################################
+
+    typestore = get_typestore(Stores.LATEST)
+    last_imgs = []                              # Will contain the bath of size `frame_verif_rate`
+    boxes_list = []                             # Will contain the boxes of the reconnized elements
+    begin = True                                # Used to know if it is the beginning of the process
+    full_batch = False                          # Will be true when the batch is full
+    min_conf = None                             # Initialized to none but will evolve 
+    width, height = 0, 0 
+    bridge = CvBridge()                         # Used to transform ROS images to CV2 
+                                                # and vice versa
+
+    ################### FINISH IMPLEMENTING ROS2 ###################
+    # with Reader(input_path) as reader, Writer(output_path) as writer:
+    ################################################################
+
+    ####################### PLACEHOLDER CODE #######################
+    with Reader(input_path) as reader:
+    ################################################################
+        if verbose: print(f"Number of messages: {reader.message_count}")
+        if verbose:
+            reader_iterator = tqdm(reader.messages())
+        else:
+            reader_iterator = reader.messages()
+        
+        # We iterate through all messages in the input bagfile
+        for connection, timestamp, rawdata in reader_iterator:
+            if connection.topic == img_topic:
+                # Decode from a ROS image message to a CV2 image
+                msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
+                img = bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8").copy()
+                last_imgs.append(img)       # Add the image to the batch
+
+                if width == 0 and height == 0:
+                    width, height = msg.width, msg.height
+
+                # If it is the first frames and the batch is half full
+                if begin and len(last_imgs) == math.ceil(frame_verif_rate/2):
+                    begin = False
+                    full_batch = True
+                    idx_img = 0             # The verification frame is the first frame
+                # If the batch is full (and it isn't the first frames)
+                elif len(last_imgs) == frame_verif_rate:
+                    full_batch = True
+                    idx_img = math.ceil(frame_verif_rate/2)-1
+
+                if full_batch:
+                    full_batch = False
+
+                    # We check if something were detected in the 
+                    # verification frame 
+                    boxes = next(model(last_imgs[idx_img], stream=True, verbose=False)).boxes
+                    to_blur = len(boxes) > 0
+
+                    # If the verification frame had a detection we 
+                    # launch the detection for the frames of the batch                
+                    for img in last_imgs:
+                        boxes_list.append([])
+
+                        # If there was a detection in the frame, we 
+                        # modify the thrust threeshold 
+                        if to_blur:
+                            boxes = next(model(img, stream=True, verbose=False)).boxes
+                            if len(boxes.conf) > 0:
+                                if isinstance(min_conf, type(None)):
+                                    min_conf = boxes.conf.mean() * 0.6
+                                else:
+                                    min_conf = (min_conf + boxes.conf.mean())/2 *0.6
+
+                            # For all detections, we add those boxes 
+                            # to the boxes list
+                            for box in boxes:
+                                if box.conf[0] > min_conf:
+                                    boxes_list[-1].append(box.xyxy[0].tolist())
+                    # Empty the batch
+                    last_imgs = []
+
+            ################### FINISH IMPLEMENTING ROS2 ###################
+            #     else:
+            #         if connection.topic not in writer_connection_dict.keys():
+            #             writer_connection_dict[connection.topic] = writer.add_connection(connection.topic, connection.msgtype, typestore=typestore)
+            #         writer_connection = writer_connection_dict[connection.topic]
+            #         writer.write(writer_connection, timestamp, typestore.serialize_cdr(rawdata, connection.msgtype))
+            ################################################################
+
+        # If there is still some last frames in the batch, we make the 
+        # same process as before, but the verification frame is the last frame
+        boxes = next(model(last_imgs[-1], stream=True, verbose=False)).boxes
+        to_blur = len(boxes) > 0
+        for img in last_imgs:
+            boxes_list.append([])
+            if to_blur:
+                boxes = next(model(img, stream=True, verbose=False)).boxes
+                
+                for box in boxes:
+                    boxes_list[-1].append(box.xyxy[0].tolist())
+
+        if verbose: print(f"Countering the flickering")
+        boxes_list = fill_list(boxes_list, frame_verif_rate*2, math.ceil(math.sqrt(max(msg.width, msg.height)))*2.5)
+
+        ####################### PLACEHOLDER CODE #######################
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        video = cv2.VideoWriter(filename=f"{output_path}.mp4", 
+                            fourcc=fourcc, 
+                            fps=15, 
+                            frameSize=(width, height))
+        ################################################################
+
+        ################### FINISH IMPLEMENTING ROS2 ###################
+        # writer_connection = writer.add_connection(img_topic, 'sensor_msgs/msg/Image', typestore=typestore)
+        ################################################################
+
+        if verbose: print("Writing the images in the output bag file")
+        if verbose:
+            reader_iterator = tqdm(reader.messages())
+        else:
+            reader_iterator = reader.messages()
+
+        idx_boxes = 0
+        for connection, timestamp, rawdata in reader_iterator:
+            if connection.topic == img_topic:
+
+        ####################### PLACEHOLDER CODE #######################
+                msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
+                img = bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8").copy()
+                for box in boxes_list[idx_boxes]:
+                    img = blur_box(img, box, black_box)
+                video.write(img)
+
+        ################################################################
+
+        ################### FINISH IMPLEMENTING ROS2 ###################
+        #         if len(boxes_list[idx_boxes]) > 0:
+        #             msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
+        #             img = bridge.imgmsg_to_cv2(msg, desired_encoding="rgb8").copy()
+        #             for box in boxes_list[idx_boxes]:
+        #                 img = blur_box(img, box, black_box)
+
+        #             image_message = bridge.cv2_to_imgmsg(img, encoding="rgb8")
+        #             image_message = Image(
+        #                 image_message.header,
+        #                 image_message.height,
+        #                 image_message.width,
+        #                 image_message.encoding,
+        #                 image_message.is_bigendian,
+        #                 image_message.step,
+        #                 image_message.data
+        #             )
+        #             new_msg = typestore.serialize_cdr(image_message, 'sensor_msgs/msg/Image')
+        #             writer.write(writer_connection, timestamp, new_msg)
+        ################################################################
+
+                idx_boxes += 1
+
+    ####################### PLACEHOLDER CODE #######################
+        video.release()
+    ################################################################
 
     if verbose: print("End of blurring")
 
@@ -420,17 +672,15 @@ def save_ros1_mp4(bagfile, topic="/camera/color/image_raw"):
     fps = bag_data.topic_table[bag_data.topic_table["Topics"] == topic]["Frequency"].item()
     frame = next(images).message
 
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    video = cv2.VideoWriter(filename=f"{bagfile}.mp4", 
-                            fourcc=fourcc, 
-                            fps=fps, 
-                            frameSize=(frame.width, frame.height))
+    video = create_video_file(f"{bagfile}.mp4", fps, (frame.width, frame.height))
+
     while True:
         try:
             video.write(bridge.imgmsg_to_cv2(frame, desired_encoding="bgr8"))
             frame = next(images).message
         except StopIteration:
             break
+    video.release()
 
 
 if __name__ == "__main__":
@@ -457,7 +707,13 @@ if __name__ == "__main__":
                 save_ros1_mp4(bag_file, topic)
 
         case 2:
-            print("not implemented")
+            topic = "/d435i/color/image_raw" if isinstance(args.topic, type(None)) else args.topic
+            blur_ros2(model, bag_file, 
+                    output_file, 
+                    img_topic=topic,
+                    frame_verif_rate=5 if isinstance(args.frame_rate, type(None)) else args.frame_rate, 
+                    black_box=args.black_box, 
+                    verbose=args.verbose)
         case _:
             print("Wrong version (either 1 or 2)")
 
