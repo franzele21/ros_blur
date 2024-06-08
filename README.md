@@ -28,7 +28,7 @@ With the first argument being the path to the bag file containing the video to b
 You can also add the following options:
 | Command           | Alternative Form | Description                               |
 |-------------------|------------------|-------------------------------------------|
-| `--output_file`   | `-o`             | Path/name of the output video             |
+| `--output_file`   | `-o`             | Path/name of the output             |
 | `--frame_rate`    |                  | Sampling interval                         |
 | `--topic`         |                  | Topic where the video is saved            |
 | `--black_box`     |                  | Replaces blurring with a black box (faster than blurring) |
@@ -153,3 +153,11 @@ python3 -m pip install --force-reinstall --extra-index-url https://rospypi.githu
 ```
 
 ## TODO
+
+This is what needs to be done so the implementation for ROS2 bag file is over:
+- [x] Reading a ROS2 bag file
+- [x] Extracting the image messages from a ROS2 bag file
+- [x] Convert those image messages into a workable format
+- [x] Use the blurring process on those images
+- [x] Output a video from the blurring
+- [ ] Save the new images in the ROS2 bag file
