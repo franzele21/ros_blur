@@ -1,0 +1,8 @@
+bagpy==0.5
+cv-bridge==1.13.0.post0
+numpy==1.26.4
+opencv-python==4.10.0.82
+opencv-python-headless==4.10.0.82
+rosbag==1.15.11
+tqdm==4.66.4
+ultralytics==8.2.14
