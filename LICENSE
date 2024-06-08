@@ -1,29 +1,3 @@
-
-Lire l'article
-Free Software Supporter (traduit):
-ADHÉRER À LA FSF
-
- [une tête de GNU] Système d'exploitation GNU
-Soutenu par la Free Software Foundation
- [Rechercher sur www.gnu.org] 
- [Autres langues] 
-
-    À PROPOS PHILOSOPHIE LICENCES ÉDUCATION LOGICIELS DISTROS DOC MALICIELS AIDEZ GNU AUDIO & VIDÉO ART GNU HUMOUR TROMBINOSCOPE RÉPERTOIRE LOGICIEL MATÉRIEL PLAN DU SITE 
-
-[Traduit de l'anglais]
-Licence publique générale GNU Affero
- [Logo de l'AGPLv3] 
-
-Texte de l'AGPLv3
-
-    Pourquoi la GPL Affero ?
-    Foire aux questions sur les licences GNU
-    Comment utiliser les licences GNU pour vos logiciels
-    Traductions de la GNU AGPL
-    La GNU AGPL dans d'autres formats : texte brut, Docbook, LaTeX, HTML hors ligne, Texinfo, Markdown, ODF, RTF
-    Logos de la GNU AGPL à utiliser avec votre projet
-    Que faire si vous constatez une possible violation de la GNU AGPL ?
-
 GNU AFFERO GENERAL PUBLIC LICENSE
 
 Version 3, 19 November 2007
@@ -48,7 +22,7 @@ An older license, called the Affero General Public License and published by Affe
 
 The precise terms and conditions for copying, distribution and modification follow.
 TERMS AND CONDITIONS
-0. Definitions.
+1. Definitions.
 
 "This License" refers to version 3 of the GNU Affero General Public License.
 
@@ -237,4 +211,3 @@ Also add information on how to contact you by electronic and paper mail.
 If your software can interact with users remotely through a computer network, you should also make sure that it provides a way for users to get its source. For example, if your program is a web application, its interface could display a "Source" link that leads users to an archive of the code. There are many ways you could offer source, and different solutions will be better for different programs; see section 13 for the specific requirements.
 
 You should also get your employer (if you work as a programmer) or school, if any, to sign a "copyright disclaimer" for the program, if necessary. For more information on this, and how to apply and follow the GNU AGPL, see <https://www.gnu.org/licenses/>.
-
