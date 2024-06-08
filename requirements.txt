@@ -6,3 +6,4 @@ opencv-python-headless==4.10.0.82
 rosbag==1.15.11
 tqdm==4.66.4
 ultralytics==8.2.14
+pytest-shutil==1.7.0
