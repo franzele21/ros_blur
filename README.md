@@ -1,43 +1,118 @@
-# Floutage automatique de vidéo à partir d'un modèle YOLOv8
 
-Ce projet permets de flouter automatiquement une vidéo contenue dans un fichier .bag (au format ROS1 [ROS2 pas encore implémenté]).
+# Automatic Video Blurring Using YOLOv8 Model
 
-## Prérequis
-Le projet a été développé sous Python 3.10, donc il est conseillé d'avoir une version supérieure ou égale à celle-ci (aucun test n'a été fait avec une version antérieure).
+This project allows automatic blurring of a video contained in a .bag file (in ROS1 format [ROS2 not yet fully implemented]).
+
+## Prerequisites
+The project was developed using Python 3.10.12, so it is recommended to have this version or higher.
 
 ## Installation
-D'abord, il faut cloner ce repo Git, en faisant :
+First, clone this Git repository by running:
 ```
-git clone https://github.com/franzele21/pji.git
+git clone https://github.com/franzele21/ros_blur.git
 ```
-Puis on rentre dans le projet, et on télécharge les modules nécessaires :
+Then enter the project directory and download the necessary modules:
 ```
-cd pji
+cd ros_blur
 python3 -m pip install -r requirements.txt
 ```
 
-## Utilisation
-Pour utiliser le programme, il suffit, dans la ligne de commande, d'écrire la commande suivante :
+## Usage
+To use the program, simply type the following command in the command line:
 ```
-python3 blur_bag.py chemin/vers/fichier.bag chemin/vers/modèle.pt
+python3 blur_bag.py path/to/file.bag path/to/model.pt bag_version
 ```
 
-Avec le premier argument étant le chemin vers le fichier bag possédant la vidéo à flouter, et le deuxième argument est le modèle Yolov8 qui servira à trouver les zones à flouter (par exemple, on mettra un modèle qui peut trouver les [visages](https://github.com/akanametov/yolov8-face) pour les flouter).
+With the first argument being the path to the bag file containing the video to be blurred, the second argument is the Yolov8 model that will be used to find the areas to blur (for example, a model that can detect [faces](https://github.com/akanametov/yolov8-face) for blurring). The third argument is the bag version (either 1 or 2).
 
-On peut aussi rajouter des options suivantes :
-| Commande          | Autre forme   | Description |
-|-------------------|---------------|-------------|
-| `--output_file`   | `-o`          | Chemin/nom de la vidéo de sortie |
-| `--frame_rate`    |               | Intervalle d'échantillonnage |
-| `--black_box`     |               | Remplace le floutage par une boite noire (plus rapide que le floutage) |
-| `--keep_orig_mp4` |               | Garde la reconstruction du fichier mp4 du fichier bag avant le floutage |
-| `--verbose`       | `-v`          | Affiche l'avancement du processus |
+You can also add the following options:
+| Command           | Alternative Form | Description                               |
+|-------------------|------------------|-------------------------------------------|
+| `--output_file`   | `-o`             | Path/name of the output video             |
+| `--frame_rate`    |                  | Sampling interval                         |
+| `--topic`         |                  | Topic where the video is saved            |
+| `--black_box`     |                  | Replaces blurring with a black box (faster than blurring) |
+| `--orig_mp4` |                  | Make the mp4 video of the bagfile before blurring |
+| `--new_mp4` |                   | Make the mp4 video of the bagfile after blurring |
+| `--verbose`       | `-v`             | Displays process progress                 |
 
-## Explication du programme 
-Voici comment se déroule le programme :
-1. D'abord, on lit le fichier .bag, et on extrait la vidéo. On enregistre cette vidéo dans un fichier mp4 (fonction `bag_to_mp4()`).
-2. Dans la fonction `blur_video()`, on appelle la fonction `tmp_video()`, qui créer une vidéo temporaire de la vidéo extraite du fichier bag, mais cette nouvelle vidéo sera plus courte que l'originale : cette fonction va échantillonner chaque $x$ frame. De base, on échantillonne chaque 5 frames de la vidéo du fichier bag, mais on peut changer le nombre en spécifiant l'intervalle d'échantillonage avec l'option de commande `--frame_rate`.
-3. De retour dans le contexte de `blur_video()`, on va ouvrir la vidéo originale et la vidéo d'échantillon en parrallèle, et on va parcourir les deux en même temps. Pour chaque frame de la vidéo d'échantillon, on va passer la frame dans le modèle Yolov8, afin de savoir s'il y'a des zones à flouter. S'il n'y a pas de zones à flouter, on enregistre les frames voisines à la frame échantillon sans les vérifier par le modèle. Si on trouve au moins une zone à flouter dans la frame d'échantillon, on va passer les frames voisines de la vidéo originale au modèle, afin de flouter aussi les frames voisines si besoin. L'intervalle d'échantillonnage est de 5 frame de base, mais peut être modifié avec l'option `--frame_rate`.
-4. Quand une frame à besoin d'être floutée, on extrait les `box` des zones à flouter, et on les donnent à la fonction `blur_box()`. Si on a mit `--black_box`, on ne va pas flouter les zones, mais on va poser une boîte noir. Cette option est plus rapide que le floutage. 
-5. Une fois toute la vidéo faite, on enregistre la vidéo sous le nom `ouput.mp4` ou un nom donné avec l'option `--output_file`
-6. On supprime la vidéo d'échantillon, et si l'option `--keep_orig_mp4` n'a pas été passé, on ne garde pas la vidéo extraite du fichier bag.
+Demonstration:
+
+![Demo](documentation/demo.gif)
+
+## Program Explanation
+
+The blurring process of this programm is optimized for videos that has potentially not a lot of blurring to make, because we don't check every frame in the video (not necessary if the event isn't that frequent) but every frame in at regular intervals.
+
+
+Here is a schema of how the algorithm works: 
+
+![legend](/documentation/legende.drawio.png)
+
+First phase, the "sampling" phase:
+
+![phase1](/documentation/phase1_echantillonage.drawio.png)
+
+Second phase, the "verification" phase:
+
+![phase2](/documentation/phase2_floutage.drawio.png)
+
+Here is a pseudocode of the blurring algorithm:
+
+```
+min_confidence = None // Minimum confidence threshold for detection
+
+// Initialize containers for image processing
+image_batch = [] // To store a batch of images
+detection_boxes = [] // To store detection boxes for each image
+
+// First phase: the "sampling" phase
+
+// Read messages from input
+FOR EACH image IN input
+    APPEND image to image_batch
+
+    // Check if a batch is ready for detection
+    IF length of image_batch EQUALS frame_verif_rate THEN
+		// Sampling
+		SELECT middle_image from image_batch for detection
+
+
+		// Perform detection using the model
+		SET detection_flag to TRUE IF DETECT in middle_image
+		
+		// Apply detection results to all images in the batch
+		// Verification phase
+		FOR EACH image IN image_batch:
+			IF detection_flag:
+				detected_boxes = DETECT in image
+				FILTER detected_boxes by confidence
+				APPEND to detection_boxes
+			ELSE:
+				APPEND empty list to detection_boxes
+			ENDIF
+		ENDFOR
+	ENDIF
+
+	// Reset image batch after processing
+	CLEAR image_batch
+ENDFOR
+
+
+// Process any remaining images in the batch
+IF image_batch is not empty:
+PERFORM detection on last image in batch
+REPEAT steps as above for detection and storing boxes
+
+
+// Apply blurring to images and write to output
+FOR EACH message IN input:
+    RETRIEVE corresponding detection_boxes
+	IF length(detection_boxes) greater than 0 THEN
+    	APPLY blurring to image using detection_boxes
+	ENDIF
+    WRITE image to output
+ENDFOR
+```
+
+In this pseudocode, the "sampling" is done by taking the middle frame of the batch. The batch size is the given frame rate. If the sampled frame has a detection in it, then we will check for all its neighbooring frames (so it is the verification phase). 
