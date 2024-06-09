@@ -290,14 +290,15 @@ def blur_ros1(model,
         boxes_list = []         # Will contain the boxes of the reconnized elements
         begin = True            # Used to know if it is the beginning of the process
         full_batch = False      # Will be true when the batch is full
+        img_msg = None
 
-        if verbose: print(f"Number of messages: {rosbag.Bag(input_path).get_message_count()}")
+        if verbose: print(f"\nNumber of messages: {rosbag.Bag(input_path).get_message_count()}")
         if verbose:
             input_bag_messages = tqdm(rosbag.Bag(input_path).read_messages())
         else:
             input_bag_messages = rosbag.Bag(input_path).read_messages()
 
-        if verbose: print("Extracting the boxes")
+        if verbose: print("\nExtracting the boxes")
 
         # We iterate through all messages in the input bagfile
         for topic, msg, t in input_bag_messages:
@@ -371,7 +372,9 @@ def blur_ros1(model,
                         boxes_list[-1].append(box.xyxy[0].tolist())
 
 
-        if verbose: print("Countering the flickering")
+        assert not isinstance(img_msg, type(None)), f"No images were found for the topic {topic}"
+
+        if verbose: print("\nCountering the flickering")
 
         # This function adds boxes to counter flickering of the boxes, 
         # and add boxes before the prediction 
@@ -381,7 +384,7 @@ def blur_ros1(model,
             input_bag_messages = tqdm(rosbag.Bag(input_path).read_messages())
         else:
             input_bag_messages = rosbag.Bag(input_path).read_messages()
-        if verbose: print("Writing the images in the output bag file")
+        if verbose: print("\nWriting the images in the output bag file")
 
         # Here we apply the blur to the images and we write it in 
         # the output bagfile
@@ -702,6 +705,7 @@ if __name__ == "__main__":
             if args.new_mp4:
                 if args.verbose: print(f"Creating {output_file}.mp4")
                 save_ros1_mp4(output_file, topic)
+                os.system(f"rmdir {output_file[:-4]}")
             if args.orig_mp4:
                 if args.verbose: print(f"Creating {bag_file}.mp4")
                 save_ros1_mp4(bag_file, topic)
