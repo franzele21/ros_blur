@@ -1,5 +1,5 @@
 
-# Automatic Video Blurring Using YOLOv8 Model
+# Automatic Ros Bagfile Video Blurring Using YOLOv8 Model
 
 This project allows automatic blurring of a video contained in a .bag file (in ROS1 format [ROS2 not fully implemented yet]).
 
