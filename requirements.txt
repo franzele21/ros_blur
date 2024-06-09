@@ -3,7 +3,8 @@ cv-bridge==1.13.0.post0
 numpy==1.26.4
 opencv-python==4.10.0.82
 opencv-python-headless==4.10.0.82
+pytest-shutil==1.7.0
 rosbag==1.15.11
+rosbags==0.10.2
 tqdm==4.66.4
 ultralytics==8.2.14
-pytest-shutil==1.7.0

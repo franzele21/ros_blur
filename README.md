@@ -17,6 +17,13 @@ cd ros_blur
 python3 -m pip install -r requirements.txt
 ```
 
+In the beginning of the script, you will find a line like:
+```python3
+ROS_SETUP_FILE = "/opt/ros/humble/setup.sh"
+```
+
+You will have to change if the line to the path of your ROS setup file. (it will [normally] have this form `/opt/ros/$YOUR_VERSION/setup.sh`).
+
 ## Usage
 To use the program, simply type the following command in the command line:
 ```
@@ -134,6 +141,19 @@ To effectevly counter the flickering, `fill_list` will not just check the next f
 
 `fill_list` will also add boxes to the frames before they were detected by the model, so it will begin to blur before the model detected it. It can counter when the model predict too late that there is something to blur.
 
+## ROS2 Process
+
+Because I didn't found how to directly put data in a ROS2 bagfile, I had to do a workaround. 
+
+There is a command called `rosbags-convert` (coming from the `rosbags` module [the "s" at the end is important]) that can be used to convert a bagfile to an another format.
+
+Because we can already blur a video contained in a ROS1 bagfile, we can use the same program to do it for a ROS2 bagfile, just by converting it into an another ROS1 bagfile, doing the blurring, and then re-converting it into a ROS2 bagfile. Because we only know one topic from the original bagfile (that is, the topic where the video is saved), we can create a bagfile from with only this topic in it, and then merge the two bagfile. 
+
+To avoid conflicts, we delete the video in the original bagfile.
+
+![ROS2 Process](documentation/ros2_process.drawio.png)
+
+Unfrtunatly, because of the usage of `rosbags-convert`, we cannot merge with unknown topic, so there can be a loss of information.
 
 ## Troubleshooting
 
@@ -151,13 +171,3 @@ If the problem persist, try this command:
 ```
 python3 -m pip install --force-reinstall --extra-index-url https://rospypi.github.io/simple/ rospy rosbag
 ```
-
-## TODO
-
-This is what needs to be done so the implementation for ROS2 bag file is over:
-- [x] Reading a ROS2 bag file
-- [x] Extracting the image messages from a ROS2 bag file
-- [x] Convert those image messages into a workable format
-- [x] Use the blurring process on those images
-- [x] Output a video from the blurring
-- [ ] Save the new images in the ROS2 bag file

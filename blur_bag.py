@@ -32,6 +32,7 @@ from tqdm import tqdm
 import numpy as np
 import os
 import shutil
+import uuid
 
 # modules used for opening / editing / writing ROS bag file
 import rosbag
@@ -39,6 +40,9 @@ from cv_bridge import CvBridge
 import bagpy as bg
 from rosbags.rosbag2 import Reader, Writer
 from rosbags.typesys import Stores, get_typestore
+import sqlite3
+
+ROS_SETUP_FILE = "/opt/ros/humble/setup.sh"
 
 def fill_list(box_list: list, frame_rate:int=1, box_difference:int=5):
     """
@@ -457,190 +461,53 @@ def blur_ros2(model,
     .yaml files, handling non-image topics, and properly finalizing the writing
     into the ROS2 bag file.
     """
-    ####################### PLACEHOLDER CODE #######################
-    print("\n\n\nTHIS METHOD ISN'T FULLY IMPLEMENTED YET, THE RESULT WILL JUST BE A MP4 VIDEO\n\n\n")
-    ################################################################
+    
+    print("\n\nWARNING: BE SURE TO HAVE ENOUGH DISK SPACE (df -h to see)\n\n")
 
-    ################### FINISH IMPLEMENTING ROS2 ###################
-    # if verbose: print(f"Verification if needing to be copied")
-    # if not os.path.exists(output_path): os.mkdir(output_path)
+    dst1_name = uuid.uuid4().hex + ".bag"
+    dst2_name = uuid.uuid4().hex + ".bag"
+    dst3_name = uuid.uuid4().hex
+    if verbose: print(f"Converting ROS2 -> ROS1 on topic {img_topic}...")
+    os.system(f"rosbags-convert --src {input_path} --dst {dst1_name} --include-topic {img_topic}")
 
-    # db3_file_list = [file for file in os.listdir(output_path) if ".db" in file]
-    # if len(db3_file_list) == 0:
-    #     if verbose: print(f"Copying the .db3 file (this may take a while)")
-    #     db3_file_name = [file for file in os.listdir(input_path) if len(file)> 1 and".db3" == file[-4:]][0]
-    #     shutil.copyfile(os.path.join(input_path, db3_file_name), os.path.join(output_path, db3_file_name))
-    # else:
-    #     db3_file_name = db3_file_list[0]
+    blur_ros1(model, dst1_name, dst2_name, img_topic, frame_verif_rate, black_box, verbose)
+    os.remove(dst1_name)
 
-    # yaml_file_list = [file for file in os.listdir(output_path) if ".yaml" in file]
-    # if len(yaml_file_list) == 0:
-    #     yaml_file_name = [file for file in os.listdir(input_path) if len(file)> 1 and".yaml" == file[-5:]][0]
-    #     shutil.copyfile(os.path.join(input_path, yaml_file_name), os.path.join(output_path, yaml_file_name))
-    # if verbose: print(f"End of copying")
-    ################################################################
+    if verbose: print("Converting ROS1 -> ROS2...")
+    os.system(f"rosbags-convert --src {dst2_name} --dst {dst3_name} --dst-typestore ros2_humble")
+    os.remove(dst2_name)
 
-    ################### FINISH IMPLEMENTING ROS2 ###################
-    # Image = typestore.types['sensor_msgs/msg/Image']
-    # writer_connection_dict = {}
-    ################################################################
+    if verbose: print(f"Drop video column {img_topic} in {input_path}")
+    db3_path = os.path.join(input_path, [x for x in os.listdir(input_path) if x[-4:] == ".db3"][0])
+    db3_connection = sqlite3.connect(db3_path)
+    db3_cursor = db3_connection.cursor()
 
-    typestore = get_typestore(Stores.LATEST)
-    last_imgs = []                              # Will contain the bath of size `frame_verif_rate`
-    boxes_list = []                             # Will contain the boxes of the reconnized elements
-    begin = True                                # Used to know if it is the beginning of the process
-    full_batch = False                          # Will be true when the batch is full
-    min_conf = None                             # Initialized to none but will evolve 
-    width, height = 0, 0 
-    bridge = CvBridge()                         # Used to transform ROS images to CV2 
-                                                # and vice versa
+    topic_id = db3_cursor.execute(f"SELECT id FROM topics WHERE name = '{topic}';").fetchone()[0]
 
-    ################### FINISH IMPLEMENTING ROS2 ###################
-    # with Reader(input_path) as reader, Writer(output_path) as writer:
-    ################################################################
+    db3_cursor.execute(f"DELETE FROM messages WHERE topic_id = {topic_id};")
+    db3_cursor.execute(f"DELETE FROM topics WHERE id = {topic_id};")
+    db3_connection.commit()
+    db3_connection.close()
 
-    ####################### PLACEHOLDER CODE #######################
-    with Reader(input_path) as reader:
-    ################################################################
-        if verbose: print(f"Number of messages: {reader.message_count}")
-        if verbose:
-            reader_iterator = tqdm(reader.messages())
-        else:
-            reader_iterator = reader.messages()
-        
-        # We iterate through all messages in the input bagfile
-        for connection, timestamp, rawdata in reader_iterator:
-            if connection.topic == img_topic:
-                # Decode from a ROS image message to a CV2 image
-                msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
-                img = bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8").copy()
-                last_imgs.append(img)       # Add the image to the batch
+    if verbose: print(f"Merge of {input_path} and {dst3_name}")
+    with open("out.yaml", "w") as file:
+        file.write(f"""output_bags:
+- uri: {output_path}
+  all_topics: true
+  all_services: true
+""")
+    source_cmd = f"source {ROS_SETUP_FILE}"
+    convert_cmd = f"ros2 bag convert -i {dst3_name} -i {input_path} -o out.yaml"
 
-                if width == 0 and height == 0:
-                    width, height = msg.width, msg.height
+    os.system(f'COMMAND="{source_cmd} && {convert_cmd}"; /bin/bash -c "$COMMAND"')
+    
 
-                # If it is the first frames and the batch is half full
-                if begin and len(last_imgs) == math.ceil(frame_verif_rate/2):
-                    begin = False
-                    full_batch = True
-                    idx_img = 0             # The verification frame is the first frame
-                # If the batch is full (and it isn't the first frames)
-                elif len(last_imgs) == frame_verif_rate:
-                    full_batch = True
-                    idx_img = math.ceil(frame_verif_rate/2)-1
+    if verbose: print(f"Delete {dst3_name}")
+    os.remove("out.yaml")
+    shutil.rmtree(dst3_name)
 
-                if full_batch:
-                    full_batch = False
 
-                    # We check if something were detected in the 
-                    # verification frame 
-                    boxes = next(model(last_imgs[idx_img], stream=True, verbose=False)).boxes
-                    to_blur = len(boxes) > 0
-
-                    # If the verification frame had a detection we 
-                    # launch the detection for the frames of the batch                
-                    for img in last_imgs:
-                        boxes_list.append([])
-
-                        # If there was a detection in the frame, we 
-                        # modify the thrust threeshold 
-                        if to_blur:
-                            boxes = next(model(img, stream=True, verbose=False)).boxes
-                            if len(boxes.conf) > 0:
-                                if isinstance(min_conf, type(None)):
-                                    min_conf = boxes.conf.mean() * 0.6
-                                else:
-                                    min_conf = (min_conf + boxes.conf.mean())/2 *0.6
-
-                            # For all detections, we add those boxes 
-                            # to the boxes list
-                            for box in boxes:
-                                if box.conf[0] > min_conf:
-                                    boxes_list[-1].append(box.xyxy[0].tolist())
-                    # Empty the batch
-                    last_imgs = []
-
-            ################### FINISH IMPLEMENTING ROS2 ###################
-            #     else:
-            #         if connection.topic not in writer_connection_dict.keys():
-            #             writer_connection_dict[connection.topic] = writer.add_connection(connection.topic, connection.msgtype, typestore=typestore)
-            #         writer_connection = writer_connection_dict[connection.topic]
-            #         writer.write(writer_connection, timestamp, typestore.serialize_cdr(rawdata, connection.msgtype))
-            ################################################################
-
-        # If there is still some last frames in the batch, we make the 
-        # same process as before, but the verification frame is the last frame
-        boxes = next(model(last_imgs[-1], stream=True, verbose=False)).boxes
-        to_blur = len(boxes) > 0
-        for img in last_imgs:
-            boxes_list.append([])
-            if to_blur:
-                boxes = next(model(img, stream=True, verbose=False)).boxes
-                
-                for box in boxes:
-                    boxes_list[-1].append(box.xyxy[0].tolist())
-
-        if verbose: print(f"Countering the flickering")
-        boxes_list = fill_list(boxes_list, frame_verif_rate*2, math.ceil(math.sqrt(max(msg.width, msg.height)))*2.5)
-
-        ####################### PLACEHOLDER CODE #######################
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        video = cv2.VideoWriter(filename=f"{output_path}.mp4", 
-                            fourcc=fourcc, 
-                            fps=15, 
-                            frameSize=(width, height))
-        ################################################################
-
-        ################### FINISH IMPLEMENTING ROS2 ###################
-        # writer_connection = writer.add_connection(img_topic, 'sensor_msgs/msg/Image', typestore=typestore)
-        ################################################################
-
-        if verbose: print("Writing the images in the output bag file")
-        if verbose:
-            reader_iterator = tqdm(reader.messages())
-        else:
-            reader_iterator = reader.messages()
-
-        idx_boxes = 0
-        for connection, timestamp, rawdata in reader_iterator:
-            if connection.topic == img_topic:
-
-        ####################### PLACEHOLDER CODE #######################
-                msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
-                img = bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8").copy()
-                for box in boxes_list[idx_boxes]:
-                    img = blur_box(img, box, black_box)
-                video.write(img)
-
-        ################################################################
-
-        ################### FINISH IMPLEMENTING ROS2 ###################
-        #         if len(boxes_list[idx_boxes]) > 0:
-        #             msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
-        #             img = bridge.imgmsg_to_cv2(msg, desired_encoding="rgb8").copy()
-        #             for box in boxes_list[idx_boxes]:
-        #                 img = blur_box(img, box, black_box)
-
-        #             image_message = bridge.cv2_to_imgmsg(img, encoding="rgb8")
-        #             image_message = Image(
-        #                 image_message.header,
-        #                 image_message.height,
-        #                 image_message.width,
-        #                 image_message.encoding,
-        #                 image_message.is_bigendian,
-        #                 image_message.step,
-        #                 image_message.data
-        #             )
-        #             new_msg = typestore.serialize_cdr(image_message, 'sensor_msgs/msg/Image')
-        #             writer.write(writer_connection, timestamp, new_msg)
-        ################################################################
-
-                idx_boxes += 1
-
-    ####################### PLACEHOLDER CODE #######################
-        video.release()
-    ################################################################
-
+    
     if verbose: print("End of blurring")
 
 def save_ros1_mp4(bagfile, topic="/camera/color/image_raw"):
