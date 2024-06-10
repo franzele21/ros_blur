@@ -149,7 +149,7 @@ There is a command called `rosbags-convert` (coming from the `rosbags` module [t
 
 Because we can already blur a video contained in a ROS1 bagfile, we can use the same program to do it for a ROS2 bagfile, just by converting it into an another ROS1 bagfile, doing the blurring, and then re-converting it into a ROS2 bagfile. Because we only know one topic from the original bagfile (that is, the topic where the video is saved), we can create a bagfile from with only this topic in it, and then merge the two bagfile. 
 
-To avoid conflicts, we delete the video in the original bagfile.
+To avoid conflicts, we copy the original bagfile, and we delete the video of this copy. It is this copy that will be used in the merging, so we keep the original bagfile.
 
 ![ROS2 Process](documentation/ros2_process.drawio.png)
 

@@ -376,7 +376,7 @@ def blur_ros1(model,
                         boxes_list[-1].append(box.xyxy[0].tolist())
 
 
-        assert not isinstance(img_msg, type(None)), f"No images were found for the topic {topic}"
+        assert not isinstance(img_msg, type(None)), f"No images were found for the topic {img_topic}"
 
         if verbose: print("\nCountering the flickering")
 
@@ -464,21 +464,33 @@ def blur_ros2(model,
     
     print("\n\nWARNING: BE SURE TO HAVE ENOUGH DISK SPACE (df -h to see)\n\n")
 
-    dst1_name = uuid.uuid4().hex + ".bag"
-    dst2_name = uuid.uuid4().hex + ".bag"
-    dst3_name = uuid.uuid4().hex
+    # Create temporary names for the bag file
+    dst1_name = uuid.uuid4().hex + ".bag"       # Conversion of ROS2 to temp ROS1
+    dst2_name = uuid.uuid4().hex + ".bag"       # Bluring of the temp ROS1 
+    dst3_name = uuid.uuid4().hex                # Conversion of the temp ROS1 to temp ROS2
+    dst4_name = uuid.uuid4().hex                # Copy of the original file
+
+    # Conversion of the input ROS2 file to the ROS1 file
     if verbose: print(f"Converting ROS2 -> ROS1 on topic {img_topic}...")
     os.system(f"rosbags-convert --src {input_path} --dst {dst1_name} --include-topic {img_topic}")
 
+    # Blurring of the new ROS1 file
     blur_ros1(model, dst1_name, dst2_name, img_topic, frame_verif_rate, black_box, verbose)
-    os.remove(dst1_name)
+    os.remove(dst1_name)        # Delete the first ROS1 file (it isn't needed anymore)
 
+    # Conversion of the blurred ROS1 file to a ROS2 format
     if verbose: print("Converting ROS1 -> ROS2...")
     os.system(f"rosbags-convert --src {dst2_name} --dst {dst3_name} --dst-typestore ros2_humble")
-    os.remove(dst2_name)
+    os.remove(dst2_name)        # Delete the blurred ROS1 file (it isn't needed anymore)
 
-    if verbose: print(f"Drop video column {img_topic} in {input_path}")
-    db3_path = os.path.join(input_path, [x for x in os.listdir(input_path) if x[-4:] == ".db3"][0])
+    # Copy the original file
+    if verbose: print(f"Copying {input_path} into {dst4_name}")
+    shutil.copytree(input_path, dst4_name)
+
+    # Delete the images from the copied file (to avoid conflicts with the newly
+    # generated images)
+    if verbose: print(f"Drop video column {img_topic} in {dst4_name}")
+    db3_path = os.path.join(dst4_name, [x for x in os.listdir(dst4_name) if x[-4:] == ".db3"][0])
     db3_connection = sqlite3.connect(db3_path)
     db3_cursor = db3_connection.cursor()
 
@@ -489,24 +501,26 @@ def blur_ros2(model,
     db3_connection.commit()
     db3_connection.close()
 
-    if verbose: print(f"Merge of {input_path} and {dst3_name}")
+    # Creation of the .yaml file used for the merge
+    if verbose: print(f"Merge of {dst4_name} and {dst3_name}")
     with open("out.yaml", "w") as file:
         file.write(f"""output_bags:
 - uri: {output_path}
   all_topics: true
   all_services: true
 """)
+    
+    # Merge the two ROS2 files
     source_cmd = f"source {ROS_SETUP_FILE}"
-    convert_cmd = f"ros2 bag convert -i {dst3_name} -i {input_path} -o out.yaml"
-
+    convert_cmd = f"ros2 bag convert -i {dst3_name} -i {dst4_name} -o out.yaml"
     os.system(f'COMMAND="{source_cmd} && {convert_cmd}"; /bin/bash -c "$COMMAND"')
     
 
-    if verbose: print(f"Delete {dst3_name}")
+    # Cleaning
+    if verbose: print(f"Delete {dst3_name} and {dst4_name}")
     os.remove("out.yaml")
     shutil.rmtree(dst3_name)
-
-
+    shutil.rmtree(dst4_name)
     
     if verbose: print("End of blurring")
 
